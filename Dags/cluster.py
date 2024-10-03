@@ -44,7 +44,7 @@ s3_client = boto3.client('s3')
 # Config file path on S3
 config_file_s3_path = 'orchstn_config_files/Airflow_config.ini'
 
-S3_Bucket=os.environ.get("S3_Bucket")
+S3_Bucket="analytics-olap-data-lake"
 
 # getobject the config file from S3
 response = s3_client.get_object(Bucket=S3_Bucket, Key=config_file_s3_path)
@@ -69,6 +69,10 @@ def start_time():
     #just print the time    
     start_time = datetime.now()
     print(start_time)
+    print('ccccccc',git_link)
+    print('checkkkkk',s3_path)
+    
+    
 
 
 
@@ -78,6 +82,8 @@ def end_time():
     #just print the time 
     end_time = datetime.now()
     print(end_time)
+    cluster_id = kwargs['ti'].xcom_pull(task_ids='Create_emr_cluster', key='cluster_id')
+    print('clusterrrrrrr',cluster_id)
     
     
     
@@ -92,26 +98,16 @@ def Create_emr_cluster(**kwargs):
     so take call back the status of cluster once cluster is go to waiting stage then the function return cluster_id
     ''' 
     
-    #details get from config file and store a variables 
-    region_name=config.get('OLAP_pipeline', 'region_name')   
-        
-    # Create EMR client
-    client = boto3.client('emr', region_name=region_name)
-    
-    
-    # Config file path on S3
-    config_file_s3_path_cluster = 'orchstn_config_files/cluster_config.json'
-    
-    # getobject the config file from S3
-    response = s3_client.get_object(Bucket=S3_Bucket, Key=config_file_s3_path_cluster)
-    
-    # Read the contents of the file
-    cluster_details = response['Body'].read().decode('utf-8')
-    cluster_config=yaml.safe_load(cluster_details)
+
+    cluster_config={"Name": "olap_emr_spark","LogUri":"s3://analytics-olap-data-lake/logs/olap_emr_spark/", "ReleaseLabel": "emr-6.15.0","ServiceRole": "arn:aws:iam::590857988879:role/olap_emr_service_role","JobFlowRole": "olap_emr_ec2_role","Instances": {"Ec2SubnetIds": ["subnet-0cbac9d4cd934f175"],"InstanceGroups": [{"Name": "MasterInstanceGroup","InstanceRole": "MASTER","InstanceCount": 1,"InstanceType": "m6g.xlarge"},{"Name": "CoreInstanceGroup","InstanceRole": "CORE","InstanceCount": 3,"InstanceType": "m6g.xlarge"}],"Ec2KeyName": "platform_data_analytics","KeepJobFlowAliveWhenNoSteps": True,"TerminationProtected": False,"EmrManagedMasterSecurityGroup": "sg-0a697559492c15427","EmrManagedSlaveSecurityGroup": "sg-065dddeb7da510130","ServiceAccessSecurityGroup": "sg-0907224c8b6199294","AdditionalMasterSecurityGroups": ["sg-0d1cf6befcbe0a60b"],"AdditionalSlaveSecurityGroups": ["sg-0b5f6b6dc3fd300c7"]},"Applications": [{"Name": "JupyterEnterpriseGateway"},{"Name": "Spark"},{"Name": "Ganglia"}],"Configurations": [{"Properties": {"spark.sql.parquet.writeLegacyFormat": "true","spark.yarn.appMasterEnv.DATA_LAKE": "s3://analytics-olap-data-lake","spark.driver.memory": "4g","spark.executor.memory": "4g","spark.executor.cores": "4","spark.sql.autoBroadcastJoinThreshold": "10485760","spark.sql.shuffle.partitions": "50"},"Classification": "spark-defaults"},{"Classification": "spark","Properties": {"maximizeResourceAllocation": "true"}}],"BootstrapActions": [{"Name": "pre-requisites","ScriptBootstrapAction": {"Path": "s3://analytics-olap-data-lake/emr_config_files/emr_spark/spark_bootstrap_packages.sh","Args": []}}],"Tags": [{"Key": "Role","Value": "olap-processing-engine"},{"Key": "Owner","Value": "Platform"},{"Key": "Organization","Value": "Platform"},{"Key": "Business_Unit","Value": "Platform-Engineering"},{"Key": "Env","Value": "iqa"},{"Key": "Name","Value": "mu_spark_iqa_proc"},{"Key": "map-migrated","Value": "migXM7K8IMVNP"}],"VisibleToAllUsers": True}
 
     #cluster_id taken by jobflow
     response = client.run_job_flow(**cluster_config)
     cluster_id = str(response['JobFlowId'])
+
+
+    ti = kwargs['ti']
+    ti.xcom_push(key='cluster_id', value=cluster_id) 
 
     config.set('OLAP_pipeline',"cluster_id_dqm",str(cluster_id))
 
@@ -372,6 +368,13 @@ with DAG(
         python_callable=start_time,
         dag=cluster
     )
+    
+#start Time
+    end_task = PythonOperator(
+        task_id='end_task',
+        python_callable=start_time,
+        dag=cluster
+    )
 		
    
 # Trigger the 'DAG2_PS' DAG using triggerdagrunoperator for triggering purpose
@@ -389,7 +392,7 @@ with DAG(
 # Define the dependency of tasks in dag1
     	
 
-    start_task >> Create_emr_cluster >> git_clone_task >> trigger_cluster
+    start_task >> Create_emr_cluster >> git_clone_task >> end_task>> trigger_cluster
 
 
 
