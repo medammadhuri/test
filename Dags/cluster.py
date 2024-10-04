@@ -44,7 +44,7 @@ s3_client = boto3.client('s3')
 # Config file path on S3
 config_file_s3_path = 'orchstn_config_files/Airflow_config.ini'
 
-S3_Bucket=os.environ.get("S3_Bucket")
+S3_Bucket="analytics-olap-data-lake"
 
 # getobject the config file from S3
 response = s3_client.get_object(Bucket=S3_Bucket, Key=config_file_s3_path)
@@ -82,8 +82,6 @@ def end_time():
     
     
 #Create EMR cluster:
-
-
 def Create_emr_cluster(**kwargs):
     '''
     create the emr cluster based on below configuuration
@@ -180,9 +178,7 @@ def git_clone_task(**kwargs):
                     raise Exception(error_message)
                     break
                 print(step_status)
-
-
-                
+               
 # Clone the repository on the EMR cluster
 
         git_clone_command = f'git clone -b {git_branch} {git_link} {emr_path}'
@@ -221,9 +217,6 @@ def git_clone_task(**kwargs):
                     raise Exception(error_message)
                     break
                 print(step_status)
-
-
-
 
 #Execute_jupyter_notebook all task execute note book on this define function
 
@@ -388,8 +381,6 @@ with DAG(
         )
 
 # Define the dependency of tasks in dag1
-    	
-
     start_task >> Create_emr_cluster >> git_clone_task >> trigger_cluster
 
 
